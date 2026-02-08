@@ -1,0 +1,56 @@
+# Sentry Tool Configuration
+#
+# Location: ~/.config/sentry-tool/config.toml
+#
+# Profile selection precedence:
+# 1. CLI flag: sentry-tool --profile staging list
+# 2. Environment variable: export SENTRY_PROFILE=staging
+# 3. default_profile setting (below)
+#
+# Environment variables override profile values:
+# - SENTRY_URL overrides url
+# - SENTRY_ORG overrides org
+# - SENTRY_PROJECT overrides project
+# - SENTRY_AUTH_TOKEN overrides auth_token
+
+# Default profile to use when none specified
+default_profile = "production"
+
+# Local development Sentry instance
+[profiles.local]
+url = "http://localhost:9000"
+org = "dev"
+project = "test-project"
+
+# Sentry.io (SaaS) - default
+[profiles.production]
+url = "https://sentry.io"
+org = "your-org"
+project = "your-project"
+
+# Self-hosted Sentry instance
+[profiles.selfhosted]
+url = "https://sentry.example.com"
+org = "your-org"
+project = "your-project"
+
+# Usage examples:
+#
+# Use default profile (production):
+# sentry-tool list
+#
+# Use specific profile via CLI flag:
+# sentry-tool --profile staging list
+# sentry-tool -P local show ISSUE-123
+#
+# Use specific profile via environment variable:
+# export SENTRY_PROFILE=staging
+# sentry-tool list
+#
+# Override profile URL via environment variable:
+# export SENTRY_URL=https://sentry-dev.example.com
+# sentry-tool --profile production list  # Uses dev URL, production org/project
+#
+# Security note:
+# - Store auth tokens in environment variables, not in this file
+# - If you must store tokens here, ensure file permissions are restrictive (chmod 600)
