@@ -2,7 +2,7 @@ from typing import Annotated
 
 import typer
 
-from sentry_tool.commands import config, events, issues, projects
+from sentry_tool.commands import config, events, issues, projects, traces
 from sentry_tool.monitoring import setup_logging, setup_sentry
 from sentry_tool.utils import set_active_profile, set_active_project
 
@@ -18,6 +18,9 @@ app.command("show")(issues.show_issue)
 app.command("event")(events.show_event)
 app.command("events")(events.list_events)
 app.command("tags")(events.show_tags)
+app.command("transactions")(traces.list_transactions)
+app.command("trace")(traces.lookup_trace)
+app.command("transaction")(traces.show_transaction)
 app.command("list-projects")(projects.list_projects)
 app.command("open")(projects.open_sentry)
 

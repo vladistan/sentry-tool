@@ -65,9 +65,7 @@ def _print_show_json(
             return env_val
         return getattr(active_profile, field, None) if active_profile else None
 
-    effective_token = env["auth_token"] or (
-        active_profile.auth_token if active_profile else None
-    )
+    effective_token = env["auth_token"] or (active_profile.auth_token if active_profile else None)
     output = {
         "default_profile": app_config.default_profile,
         "active_profile": active_name,
@@ -111,11 +109,13 @@ def _print_show_tables(
 
         auth_token = env["auth_token"] if env["auth_token"] else active_profile.auth_token
         source = "SENTRY_AUTH_TOKEN" if env["auth_token"] and auth_token else "profile"
-        rows.append({
-            "setting": "auth_token",
-            "value": mask_token(auth_token),
-            "source": source,
-        })
+        rows.append(
+            {
+                "setting": "auth_token",
+                "value": mask_token(auth_token),
+                "source": source,
+            }
+        )
 
         columns = [
             Column("Setting", "setting", style="cyan"),
@@ -248,10 +248,12 @@ def list_projects(
                 )
 
         except NotFoundError:
-            rows.append({
-                "profile": profile_name,
-                "project": f"(org '{profile.org}' not found)",
-            })
+            rows.append(
+                {
+                    "profile": profile_name,
+                    "project": f"(org '{profile.org}' not found)",
+                }
+            )
             log.error("org_not_found", profile=profile_name, org=profile.org)
         except Exception as e:
             rows.append({"profile": profile_name, "project": f"(error: {e})"})
@@ -296,11 +298,13 @@ def validate(
     rows: list[dict[str, str]] = []
     for profile_name, profile in app_config.profiles.items():
         if not profile.auth_token or not profile.auth_token.strip():
-            rows.append({
-                "profile": profile_name,
-                "status": "FAIL",
-                "projects": "No auth token configured",
-            })
+            rows.append(
+                {
+                    "profile": profile_name,
+                    "status": "FAIL",
+                    "projects": "No auth token configured",
+                }
+            )
             log.warning("profile_missing_token", profile=profile_name)
             continue
 
@@ -314,25 +318,31 @@ def validate(
             slugs = [proj.get("slug", "unknown") for proj in projects]
             slugs_str = ", ".join(slugs) if slugs else "(none)"
 
-            rows.append({
-                "profile": profile_name,
-                "status": "OK",
-                "projects": f"{len(projects)} projects — {slugs_str}",
-            })
+            rows.append(
+                {
+                    "profile": profile_name,
+                    "status": "OK",
+                    "projects": f"{len(projects)} projects — {slugs_str}",
+                }
+            )
 
         except NotFoundError:
-            rows.append({
-                "profile": profile_name,
-                "status": "FAIL",
-                "projects": f"Organization '{profile.org}' not found",
-            })
+            rows.append(
+                {
+                    "profile": profile_name,
+                    "status": "FAIL",
+                    "projects": f"Organization '{profile.org}' not found",
+                }
+            )
             log.error("org_not_found", profile=profile_name, org=profile.org)
         except Exception as e:
-            rows.append({
-                "profile": profile_name,
-                "status": "FAIL",
-                "projects": str(e),
-            })
+            rows.append(
+                {
+                    "profile": profile_name,
+                    "status": "FAIL",
+                    "projects": str(e),
+                }
+            )
             log.error("profile_api_error", profile=profile_name, error=str(e))
 
     columns = [

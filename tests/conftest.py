@@ -199,3 +199,94 @@ def sample_project_list():
             "status": "active",
         },
     ]
+
+
+@pytest.fixture
+def sample_transactions_list():
+    return {
+        "data": [
+            {
+                "id": "7a9d60f0dd2b4cea89c4f7c53b242c47",
+                "title": "live-tail",
+                "trace": "b9b5253f2a364edab6d15806c6cf4029",
+                "transaction.duration": 83067,
+                "transaction.status": "unknown",
+                "project": "test-project",
+                "project.name": "test-project",
+                "timestamp": "2026-02-15T13:06:54+00:00",
+            },
+            {
+                "id": "f7b865fe94554bfc87c355d310deb03b",
+                "title": "live-tail",
+                "trace": "6f07af1a087146a28a640043bcc25161",
+                "transaction.duration": 297,
+                "transaction.status": "unknown",
+                "project": "test-project",
+                "project.name": "test-project",
+                "timestamp": "2026-02-15T12:48:34+00:00",
+            },
+        ]
+    }
+
+
+@pytest.fixture
+def sample_trace_events():
+    return {
+        "data": [
+            {
+                "id": "abc123def456",
+                "title": "/api/users",
+                "span_id": "a1b2c3d4e5f6",
+                "transaction.duration": 142,
+                "transaction.status": "ok",
+                "project": "test-project",
+                "timestamp": "2024-01-15T10:30:00+00:00",
+            },
+            {
+                "id": "def789abc012",
+                "title": "/api/auth",
+                "span_id": "f6e5d4c3b2a1",
+                "transaction.duration": 89,
+                "transaction.status": "ok",
+                "project": "test-project",
+                "timestamp": "2024-01-15T10:30:01+00:00",
+            },
+        ]
+    }
+
+
+@pytest.fixture
+def sample_transaction_detail():
+    return {
+        "eventID": "d3f1d81247ad4516b61da92f1db050dd",  # pragma: allowlist secret
+        "title": "/api/users",
+        "dateCreated": "2024-01-15T10:30:00+00:00",
+        "contexts": {
+            "trace": {
+                "trace_id": "abc123def456789012345678901234ab",
+                "span_id": "a1b2c3d4e5f6",
+                "parent_span_id": "1234567890ab",
+                "duration": 142.5,
+                "status": "ok",
+            }
+        },
+        "entries": [
+            {
+                "type": "spans",
+                "data": [
+                    {
+                        "op": "db.query",
+                        "description": "SELECT * FROM users",
+                        "start_timestamp": 1705319400.100,
+                        "timestamp": 1705319400.150,
+                    },
+                    {
+                        "op": "http.client",
+                        "description": "GET https://api.example.com/validate",
+                        "start_timestamp": 1705319400.160,
+                        "timestamp": 1705319400.250,
+                    },
+                ],
+            }
+        ],
+    }

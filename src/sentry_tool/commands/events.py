@@ -215,8 +215,7 @@ def show_tags(
             return
 
         rows = [
-            {"key": tag.get("key", ""), "total": str(tag.get("totalValues", 0))}
-            for tag in tags
+            {"key": tag.get("key", ""), "total": str(tag.get("totalValues", 0))} for tag in tags
         ]
 
         columns = [

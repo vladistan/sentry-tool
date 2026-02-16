@@ -94,12 +94,14 @@ def list_issues(
     ]
     if all_projects:
         columns.append(Column("Project", "project", max_width=20))
-    columns.extend([
-        Column("Status", "status", max_width=12),
-        Column("Level", "level", max_width=8),
-        Column("Count", "count", justify="right", max_width=8),
-        Column("Title", "title", max_width=50),
-    ])
+    columns.extend(
+        [
+            Column("Status", "status", max_width=12),
+            Column("Level", "level", max_width=8),
+            Column("Count", "count", justify="right", max_width=8),
+            Column("Title", "title", max_width=50),
+        ]
+    )
 
     render(rows, format, columns=columns, footer=f"Showing {len(issues)} issues")
 
