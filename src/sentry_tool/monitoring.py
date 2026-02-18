@@ -2,7 +2,7 @@
 
 Logging goes to stderr to keep stdout clean for data output (piping).
 Sentry is initialized after logging for self-monitoring.
-DSN is read from SENTRY_DSN environment variable (optional for public distribution).
+DSN resolution order: SENTRY_DSN env var > config file sentry_dsn > hardcoded default.
 """
 
 import logging
@@ -14,6 +14,7 @@ import sentry_sdk
 import structlog
 
 from sentry_tool.__about__ import __version__
+from sentry_tool.config import load_config
 
 _LOG_LEVELS: dict[str, int] = {
     "debug": logging.DEBUG,
@@ -48,20 +49,25 @@ def get_logger(name: str | None = None) -> Any:
     return logger
 
 
-def setup_sentry(environment: str = "local") -> None:
-    """Configure error tracking for this CLI tool instance.
+_DEFAULT_DSN = "https://a176b6acecc8529b8f985532d49e2e04@o4508594232426496.ingest.us.sentry.io/4510896961093633"
 
-    Reads DSN from SENTRY_DSN environment variable. Skips initialization if unset,
-    allowing the tool to run without error tracking in public distributions.
+
+def resolve_dsn() -> str | None:
+    """Check SENTRY_DSN env var first, then config file sentry_dsn field.
+
+    Returns an override DSN if configured, or None to use the hardcoded default.
     """
     dsn = os.environ.get("SENTRY_DSN")
-    if not dsn:
-        log = structlog.get_logger()
-        log.info("Sentry DSN not configured, skipping error tracking setup")
-        return
+    if dsn:
+        return dsn
 
+    config = load_config()
+    return config.sentry_dsn
+
+
+def setup_sentry(environment: str = "local") -> None:
     sentry_sdk.init(
-        dsn=dsn,
+        dsn=resolve_dsn() or _DEFAULT_DSN,
         traces_sample_rate=0.03,
         environment=environment,
         release=__version__,

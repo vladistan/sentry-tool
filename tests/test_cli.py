@@ -2,9 +2,25 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
+from sentry_tool.__about__ import __version__
 from sentry_tool.cli import app
 
 runner = CliRunner()
+
+
+# ===== Tests for --version flag =====
+
+
+def test_version_flag():
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert f"sentry-tool {__version__}" in result.stdout
+
+
+def test_version_short_flag():
+    result = runner.invoke(app, ["-V"])
+    assert result.exit_code == 0
+    assert f"sentry-tool {__version__}" in result.stdout
 
 
 # ===== Tests for list command =====

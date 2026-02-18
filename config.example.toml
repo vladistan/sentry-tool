@@ -12,6 +12,11 @@
 # - SENTRY_ORG overrides org
 # - SENTRY_PROJECT overrides project
 # - SENTRY_AUTH_TOKEN overrides auth_token
+# - SENTRY_DSN overrides sentry_dsn
+
+# Sentry DSN for error tracking
+# Resolution order: SENTRY_DSN env var > sentry_dsn config > hardcoded default
+sentry_dsn = "https://your-token@o123456.ingest.us.sentry.io/123456"
 
 # Default profile to use when none specified
 default_profile = "production"
@@ -54,3 +59,4 @@ project = "your-project"
 # Security note:
 # - Store auth tokens in environment variables, not in this file
 # - If you must store tokens here, ensure file permissions are restrictive (chmod 600)
+# - For Sentry DSN, use environment variable SENTRY_DSN in production

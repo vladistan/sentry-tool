@@ -44,6 +44,10 @@ class AppConfig(BaseModel):
 
     default_profile: str = Field(default="default")
     profiles: dict[str, SentryProfile] = Field(default_factory=lambda: {"default": SentryProfile()})
+    sentry_dsn: str | None = Field(
+        default=None,
+        description="Sentry DSN override (env var > config > hardcoded default)",
+    )
 
 
 def load_config(config_path: Path | None = None) -> AppConfig:
@@ -64,7 +68,6 @@ def load_config(config_path: Path | None = None) -> AppConfig:
                 config_data = tomllib.load(f)
                 return AppConfig(**config_data)
 
-    # No config file found, return defaults
     return AppConfig()
 
 
