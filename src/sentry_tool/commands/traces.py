@@ -1,19 +1,30 @@
 """Trace and transaction commands."""
 
 import re
+from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 import structlog
 import typer
 from rich.console import Console
 from rich.table import Table
+from rich.tree import Tree
 
 from sentry_tool.output import Column, OutputFormat, render
 from sentry_tool.utils import api, get_config
 
-log = structlog.get_logger()
-
 TRACE_ID_PATTERN = re.compile(r"^[0-9a-fA-F]{32}$")
+MAX_DESCRIPTION_LENGTH = 50
+
+
+@dataclass
+class SpanNode:
+    span_id: str
+    parent_span_id: str | None
+    op: str
+    description: str
+    duration: float
+    children: list["SpanNode"] = field(default_factory=list)
 
 
 def list_transactions(
@@ -30,6 +41,7 @@ def list_transactions(
         sentry-tool transactions -n 5
         sentry-tool transactions --format json
     """
+    log = structlog.get_logger()
     config = get_config()
 
     response = api(
@@ -86,14 +98,17 @@ def lookup_trace(
         typer.Option("--format", "-f", help="Output format"),
     ] = OutputFormat.table,
 ) -> None:
-    """Examples:
-    sentry-tool trace abc123def456789012345678901234ab
-    sentry-tool trace abc123def456789012345678901234ab -n 10
-    sentry-tool trace abc123def456789012345678901234ab --format json
+    """Look up all events belonging to a trace by its 32-character hex ID.
+
+    Examples:
+        sentry-tool trace abc123def456789012345678901234ab
+        sentry-tool trace abc123def456789012345678901234ab -n 10
+        sentry-tool trace abc123def456789012345678901234ab --format json
     """
+    log = structlog.get_logger()
     if not TRACE_ID_PATTERN.match(trace_id):
         log.error("Invalid trace ID format", trace_id=trace_id, expected="32-character hex string")
-        raise typer.Exit(1)
+        raise typer.Exit(2)
 
     config = get_config()
 
@@ -140,6 +155,83 @@ def lookup_trace(
     ]
 
     render(rows, format, columns=columns, footer=f"Showing {len(events)} events")
+
+
+def _extract_spans(event: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None, float]:
+    trace_ctx = event.get("contexts", {}).get("trace", {})
+    root_span_id = trace_ctx.get("span_id")
+    raw_duration = trace_ctx.get("duration")
+    txn_duration = raw_duration / 1000.0 if raw_duration is not None else 0.0
+    for entry in event.get("entries", []):
+        if entry.get("type") == "spans":
+            return entry.get("data", []), root_span_id, txn_duration
+    return [], root_span_id, txn_duration
+
+
+def _build_span_tree(spans: list[dict[str, Any]], root_span_id: str | None) -> SpanNode:
+    log = structlog.get_logger()
+    root = SpanNode(
+        span_id=root_span_id or "root",
+        parent_span_id=None,
+        op="transaction",
+        description="",
+        duration=0.0,
+    )
+
+    node_map: dict[str, SpanNode] = {}
+    for span in spans:
+        span_id = span.get("span_id", "")
+        if not span_id:
+            continue
+        if span_id in node_map:
+            log.warning("Duplicate span_id skipped", span_id=span_id)
+            continue
+        duration = span.get("timestamp", 0) - span.get("start_timestamp", 0)
+        node_map[span_id] = SpanNode(
+            span_id=span_id,
+            parent_span_id=span.get("parent_span_id"),
+            op=span.get("op", "(unknown)"),
+            description=span.get("description", "(no description)"),
+            duration=duration,
+        )
+
+    node_map[root.span_id] = root
+
+    for node in node_map.values():
+        if node is root:
+            continue
+        parent_id = node.parent_span_id
+        if parent_id and parent_id in node_map:
+            node_map[parent_id].children.append(node)
+        else:
+            root.children.append(node)
+
+    return root
+
+
+def _render_span_tree(
+    root: SpanNode,
+    total_spans: int,
+    txn_duration: float,
+    console: Console | None = None,
+) -> None:
+    if console is None:
+        console = Console()
+
+    tree = Tree(f"[bold]{root.op}[/bold] {root.description}")
+
+    def _add_children(parent_tree: Tree, node: SpanNode) -> None:
+        for child in node.children:
+            desc = child.description
+            if len(desc) > MAX_DESCRIPTION_LENGTH:
+                desc = desc[: MAX_DESCRIPTION_LENGTH - 3] + "..."
+            label = f"[cyan]{child.op}[/cyan] {desc} [dim]{child.duration:.3f}s[/dim]"
+            branch = parent_tree.add(label)
+            _add_children(branch, child)
+
+    _add_children(tree, root)
+    console.print(tree)
+    console.print(f"\n{total_spans} spans | {txn_duration:.3f}s total")
 
 
 def _render_timeline(spans: list[dict[str, Any]], console: Console) -> None:
@@ -280,3 +372,51 @@ def show_transaction(
         console.print("\n[dim]No span data found[/dim]")
 
     console.print()
+
+
+def show_spans(
+    event_id: Annotated[str, typer.Argument(help="Event ID")],
+    format: Annotated[
+        OutputFormat,
+        typer.Option("--format", "-f", help="Output format"),
+    ] = OutputFormat.table,
+    op: Annotated[
+        str | None,
+        typer.Option("--op", help="Filter spans by operation type (comma-separated)"),
+    ] = None,
+) -> None:
+    """Display transaction spans as a tree with optional operation filtering.
+
+    Examples:
+        sentry-tool spans d3f1d81247ad4516b61da92f1db050dd
+        sentry-tool spans d3f1d81247ad4516b61da92f1db050dd --format json
+        sentry-tool spans d3f1d81247ad4516b61da92f1db050dd --op db.query
+    """
+    log = structlog.get_logger()
+    config = get_config()
+
+    event = api(
+        f"/organizations/{config['org']}/events/{config['project']}:{event_id}/",
+        token=config["auth_token"],
+        base_url=config["url"],
+    )
+
+    spans, root_span_id, txn_duration = _extract_spans(event)
+
+    if not spans:
+        log.info("No span data found", event_id=event_id)
+        return
+
+    if op:
+        op_filters = {o.strip() for o in op.split(",")}
+        spans = [s for s in spans if s.get("op") in op_filters]
+        if not spans:
+            log.info("No spans matching op filter", op=op)
+            return
+
+    if format == OutputFormat.json:
+        render(spans, format)
+        return
+
+    root = _build_span_tree(spans, root_span_id)
+    _render_span_tree(root, len(spans), txn_duration)

@@ -22,6 +22,7 @@ app.command("tags")(events.show_tags)
 app.command("transactions")(traces.list_transactions)
 app.command("trace")(traces.lookup_trace)
 app.command("transaction")(traces.show_transaction)
+app.command("spans")(traces.show_spans)
 app.command("list-projects")(projects.list_projects)
 app.command("open")(projects.open_sentry)
 

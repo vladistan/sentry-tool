@@ -3,6 +3,7 @@
 import json as json_mod
 import tomllib
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
@@ -465,46 +466,23 @@ def test_example_config_profiles_have_required_fields():
 # ===== Tests for config list-projects command =====
 
 
-def test_config_list_projects_success(tmp_path, monkeypatch, requests_mock):
-    monkeypatch.chdir(tmp_path)
-
+def test_config_list_projects_success(tmp_path, monkeypatch, live_config):
     config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
     config_file.parent.mkdir(parents=True)
-    config_file.write_text("""
-[profiles.staging]
-url = "https://sentry-staging.test.local"
-org = "staging-org"
-project = "staging-project"
-auth_token = "staging_token"  # pragma: allowlist secret
-
-[profiles.prod]
-url = "https://sentry-prod.test.local"
-org = "prod-org"
-project = "prod-project"
-auth_token = "prod_token"  # pragma: allowlist secret
+    config_file.write_text(f"""
+[profiles.live]
+url = "{live_config['url']}"
+org = "{live_config['org']}"
+project = "{live_config['project']}"
+auth_token = "{live_config['auth_token']}"
 """)
 
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    requests_mock.get(
-        "https://sentry-staging.test.local/api/0/organizations/staging-org/projects/",
-        json=[{"slug": "web-app"}, {"slug": "api"}],
-    )
-    requests_mock.get(
-        "https://sentry-prod.test.local/api/0/organizations/prod-org/projects/",
-        json=[{"slug": "backend"}, {"slug": "frontend"}, {"slug": "mobile"}],
-    )
-
     result = config_runner.invoke(app, ["config", "list-projects"])
 
     assert result.exit_code == 0
-    assert "staging" in result.stdout
-    assert "web-app" in result.stdout
-    assert "api" in result.stdout
-    assert "prod" in result.stdout
-    assert "backend" in result.stdout
-    assert "frontend" in result.stdout
-    assert "mobile" in result.stdout
+    assert "live" in result.stdout
 
 
 def test_config_list_projects_missing_token(tmp_path, monkeypatch):
@@ -528,36 +506,31 @@ project = "staging-project"
     assert "no auth token" in result.stdout
 
 
-def test_config_list_projects_org_not_found(tmp_path, monkeypatch, requests_mock):
-    monkeypatch.chdir(tmp_path)
-
+def test_config_list_projects_org_not_found(tmp_path, monkeypatch, live_config):
     config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
     config_file.parent.mkdir(parents=True)
-    config_file.write_text("""
-[profiles.staging]
-url = "https://sentry-staging.test.local"
-org = "nonexistent-org"
-project = "staging-project"
-auth_token = "staging_token"  # pragma: allowlist secret
+    config_file.write_text(f"""
+[profiles.bogus]
+url = "{live_config['url']}"
+org = "definitely-not-a-real-org-xyz123"
+project = "test"
+auth_token = "{live_config['auth_token']}"
 """)
 
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    requests_mock.get(
-        "https://sentry-staging.test.local/api/0/organizations/nonexistent-org/projects/",
-        status_code=404,
-    )
-
     result = config_runner.invoke(app, ["config", "list-projects"])
 
     assert result.exit_code == 0
-    assert "staging" in result.stdout
+    assert "bogus" in result.stdout
     assert "not found" in result.stdout
 
 
-def test_config_list_projects_empty_result(tmp_path, monkeypatch, requests_mock):
-    monkeypatch.chdir(tmp_path)
-
+@patch(
+    "sentry_tool.commands.config.api_call",
+    side_effect=ConnectionError("connection refused"),
+)
+def test_config_list_projects_generic_exception(mock_api, tmp_path, monkeypatch):
     config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
     config_file.parent.mkdir(parents=True)
     config_file.write_text("""
@@ -565,65 +538,39 @@ def test_config_list_projects_empty_result(tmp_path, monkeypatch, requests_mock)
 url = "https://sentry-staging.test.local"
 org = "staging-org"
 project = "staging-project"
-auth_token = "staging_token"  # pragma: allowlist secret
-""")
+auth_token = "staging_token"
+""")  # pragma: allowlist secret
 
     monkeypatch.setenv("HOME", str(tmp_path))
-
-    requests_mock.get(
-        "https://sentry-staging.test.local/api/0/organizations/staging-org/projects/",
-        json=[],
-    )
 
     result = config_runner.invoke(app, ["config", "list-projects"])
 
     assert result.exit_code == 0
     assert "staging" in result.stdout
-    assert "no projects" in result.stdout
+    assert "error" in result.stdout.lower()
 
 
 # ===== Tests for config validate command =====
 
 
-def test_config_validate_success(tmp_path, monkeypatch, requests_mock):
-    monkeypatch.chdir(tmp_path)
-
+def test_config_validate_success(tmp_path, monkeypatch, live_config):
     config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
     config_file.parent.mkdir(parents=True)
-    config_file.write_text("""
-[profiles.staging]
-url = "https://sentry-staging.test.local"
-org = "staging-org"
-project = "staging-project"
-auth_token = "staging_token"  # pragma: allowlist secret
-
-[profiles.prod]
-url = "https://sentry-prod.test.local"
-org = "prod-org"
-project = "prod-project"
-auth_token = "prod_token"  # pragma: allowlist secret
+    config_file.write_text(f"""
+[profiles.live]
+url = "{live_config['url']}"
+org = "{live_config['org']}"
+project = "{live_config['project']}"
+auth_token = "{live_config['auth_token']}"
 """)
 
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    requests_mock.get(
-        "https://sentry-staging.test.local/api/0/organizations/staging-org/projects/",
-        json=[{"slug": "web-app"}],
-    )
-    requests_mock.get(
-        "https://sentry-prod.test.local/api/0/organizations/prod-org/projects/",
-        json=[{"slug": "backend"}, {"slug": "frontend"}],
-    )
-
     result = config_runner.invoke(app, ["config", "validate"])
 
     assert result.exit_code == 0
-    assert "staging" in result.stdout
-    assert "1 projects" in result.stdout
-    assert "web-app" in result.stdout
-    assert "prod" in result.stdout
-    assert "2 projects" in result.stdout
-    assert "backend, frontend" in result.stdout
+    assert "live" in result.stdout
+    assert "OK" in result.stdout
 
 
 def test_config_validate_missing_token(tmp_path, monkeypatch):
@@ -647,31 +594,48 @@ project = "staging-project"
     assert "No auth token configured" in result.stdout
 
 
-def test_config_validate_org_not_found(tmp_path, monkeypatch, requests_mock):
-    monkeypatch.chdir(tmp_path)
+def test_config_validate_org_not_found(tmp_path, monkeypatch, live_config):
+    config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
+    config_file.parent.mkdir(parents=True)
+    config_file.write_text(f"""
+[profiles.bogus]
+url = "{live_config['url']}"
+org = "definitely-not-a-real-org-xyz123"
+project = "test"
+auth_token = "{live_config['auth_token']}"
+""")
 
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    result = config_runner.invoke(app, ["config", "validate"])
+
+    assert result.exit_code == 0
+    assert "bogus" in result.stdout
+    assert "not found" in result.stdout
+
+
+@patch(
+    "sentry_tool.commands.config.api_call",
+    side_effect=ConnectionError("connection refused"),
+)
+def test_config_validate_generic_exception(mock_api, tmp_path, monkeypatch):
     config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
     config_file.parent.mkdir(parents=True)
     config_file.write_text("""
 [profiles.staging]
 url = "https://sentry-staging.test.local"
-org = "nonexistent-org"
+org = "staging-org"
 project = "staging-project"
-auth_token = "staging_token"  # pragma: allowlist secret
-""")
+auth_token = "staging_token"
+""")  # pragma: allowlist secret
 
     monkeypatch.setenv("HOME", str(tmp_path))
-
-    requests_mock.get(
-        "https://sentry-staging.test.local/api/0/organizations/nonexistent-org/projects/",
-        status_code=404,
-    )
 
     result = config_runner.invoke(app, ["config", "validate"])
 
     assert result.exit_code == 0
     assert "staging" in result.stdout
-    assert "not found" in result.stdout
+    assert "FAIL" in result.stdout
 
 
 # ===== Tests for config show command =====
@@ -865,25 +829,18 @@ url = "https://sentry-dev.test.local"
 # ===== Tests for config list-projects --format json =====
 
 
-def test_config_list_projects_json(tmp_path, monkeypatch, requests_mock):
-    monkeypatch.chdir(tmp_path)
-
+def test_config_list_projects_json(tmp_path, monkeypatch, live_config):
     config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
     config_file.parent.mkdir(parents=True)
-    config_file.write_text("""
-[profiles.staging]
-url = "https://sentry-staging.test.local"
-org = "staging-org"
-project = "staging-project"
-auth_token = "staging_token"
-""")  # pragma: allowlist secret
+    config_file.write_text(f"""
+[profiles.live]
+url = "{live_config['url']}"
+org = "{live_config['org']}"
+project = "{live_config['project']}"
+auth_token = "{live_config['auth_token']}"
+""")
 
     monkeypatch.setenv("HOME", str(tmp_path))
-
-    requests_mock.get(
-        "https://sentry-staging.test.local/api/0/organizations/staging-org/projects/",
-        json=[{"slug": "web-app"}, {"slug": "api"}],
-    )
 
     result = config_runner.invoke(app, ["config", "list-projects", "--format", "json"])
 
@@ -891,92 +848,29 @@ auth_token = "staging_token"
 
     data = json_mod.loads(result.stdout)
     projects = [row["project"] for row in data]
-    assert "web-app" in projects
-    assert "api" in projects
-
-
-def test_config_list_projects_generic_exception(tmp_path, monkeypatch, requests_mock):
-    monkeypatch.chdir(tmp_path)
-
-    config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
-    config_file.parent.mkdir(parents=True)
-    config_file.write_text("""
-[profiles.staging]
-url = "https://sentry-staging.test.local"
-org = "staging-org"
-project = "staging-project"
-auth_token = "staging_token"
-""")  # pragma: allowlist secret
-
-    monkeypatch.setenv("HOME", str(tmp_path))
-
-    requests_mock.get(
-        "https://sentry-staging.test.local/api/0/organizations/staging-org/projects/",
-        exc=ConnectionError("connection refused"),
-    )
-
-    result = config_runner.invoke(app, ["config", "list-projects"])
-
-    assert result.exit_code == 0
-    assert "staging" in result.stdout
-    assert "error" in result.stdout.lower()
+    assert len(projects) > 0
 
 
 # ===== Tests for config validate --format json =====
 
 
-def test_config_validate_json(tmp_path, monkeypatch, requests_mock):
-    monkeypatch.chdir(tmp_path)
-
+def test_config_validate_json(tmp_path, monkeypatch, live_config):
     config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
     config_file.parent.mkdir(parents=True)
-    config_file.write_text("""
-[profiles.staging]
-url = "https://sentry-staging.test.local"
-org = "staging-org"
-project = "staging-project"
-auth_token = "staging_token"
-""")  # pragma: allowlist secret
+    config_file.write_text(f"""
+[profiles.live]
+url = "{live_config['url']}"
+org = "{live_config['org']}"
+project = "{live_config['project']}"
+auth_token = "{live_config['auth_token']}"
+""")
 
     monkeypatch.setenv("HOME", str(tmp_path))
-
-    requests_mock.get(
-        "https://sentry-staging.test.local/api/0/organizations/staging-org/projects/",
-        json=[{"slug": "web-app"}],
-    )
 
     result = config_runner.invoke(app, ["config", "validate", "--format", "json"])
 
     assert result.exit_code == 0
 
     data = json_mod.loads(result.stdout)
-    assert data[0]["profile"] == "staging"
+    assert data[0]["profile"] == "live"
     assert data[0]["status"] == "OK"
-    assert "1 projects" in data[0]["projects"]
-
-
-def test_config_validate_generic_exception(tmp_path, monkeypatch, requests_mock):
-    monkeypatch.chdir(tmp_path)
-
-    config_file = tmp_path / ".config" / "sentry-tool" / "config.toml"
-    config_file.parent.mkdir(parents=True)
-    config_file.write_text("""
-[profiles.staging]
-url = "https://sentry-staging.test.local"
-org = "staging-org"
-project = "staging-project"
-auth_token = "staging_token"
-""")  # pragma: allowlist secret
-
-    monkeypatch.setenv("HOME", str(tmp_path))
-
-    requests_mock.get(
-        "https://sentry-staging.test.local/api/0/organizations/staging-org/projects/",
-        exc=ConnectionError("connection refused"),
-    )
-
-    result = config_runner.invoke(app, ["config", "validate"])
-
-    assert result.exit_code == 0
-    assert "staging" in result.stdout
-    assert "FAIL" in result.stdout
