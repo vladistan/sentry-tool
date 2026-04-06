@@ -12,7 +12,7 @@ from sentry_tool.config import AppConfig, load_config
 from sentry_tool.exceptions import ConfigurationError
 from sentry_tool.monitoring import get_logger
 from sentry_tool.output import Column, OutputFormat, render
-from sentry_tool.utils import mask_token
+from sentry_tool.utils import get_config, mask_token
 
 config_app = typer.Typer(help="Configuration management commands")
 
@@ -195,6 +195,26 @@ def list_profiles(
     ]
 
     render(rows, format, columns=columns, footer=f"{len(rows)} profiles")
+
+
+@config_app.command("token")
+def show_token() -> None:
+    """Print the auth token for the active profile.
+
+    Outputs the raw token with no formatting, suitable for piping
+    to other tools (e.g. sourcemap uploads, CI scripts).
+
+    Examples:
+        sentry-tool config token
+        sentry-tool --profile production config token
+        SENTRY_AUTH_TOKEN=$(sentry-tool config token) npx sentry-cli upload-sourcemaps
+    """
+    resolved = get_config()
+    auth_token = resolved.get("auth_token")
+    if not auth_token:
+        Console(stderr=True).print("[red]No auth token configured for active profile[/red]")
+        raise typer.Exit(1)
+    print(auth_token)
 
 
 @config_app.command("list-projects")

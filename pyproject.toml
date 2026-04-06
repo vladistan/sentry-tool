@@ -17,7 +17,7 @@ dev = [
 
 [project]
 name = "sentry-tool"
-version = "0.1.4"
+version = "0.2.0"
 description = "CLI tool for querying and managing Sentry issues"
 readme = "README.md"
 license = "MIT"

@@ -1,0 +1,4 @@
+# Coverage artifacts
+.coverage
+htmlcov/
+coverage.xml
