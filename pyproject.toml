@@ -1,5 +1,4 @@
 # Sentry Tool - CLI for querying and managing Sentry issues
-# Reference: CODE-PY-001 (Python Project Setup pattern)
 
 [build-system]
 requires = ["hatchling"]
@@ -17,7 +16,7 @@ dev = [
 
 [project]
 name = "sentry-tool"
-version = "0.2.0"
+version = "0.3.0"
 description = "CLI tool for querying and managing Sentry issues"
 readme = "README.md"
 license = "MIT"

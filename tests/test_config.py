@@ -471,10 +471,10 @@ def test_config_list_projects_success(tmp_path, monkeypatch, live_config):
     config_file.parent.mkdir(parents=True)
     config_file.write_text(f"""
 [profiles.live]
-url = "{live_config['url']}"
-org = "{live_config['org']}"
-project = "{live_config['project']}"
-auth_token = "{live_config['auth_token']}"
+url = "{live_config["url"]}"
+org = "{live_config["org"]}"
+project = "{live_config["project"]}"
+auth_token = "{live_config["auth_token"]}"
 """)
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -511,10 +511,10 @@ def test_config_list_projects_org_not_found(tmp_path, monkeypatch, live_config):
     config_file.parent.mkdir(parents=True)
     config_file.write_text(f"""
 [profiles.bogus]
-url = "{live_config['url']}"
+url = "{live_config["url"]}"
 org = "definitely-not-a-real-org-xyz123"
 project = "test"
-auth_token = "{live_config['auth_token']}"
+auth_token = "{live_config["auth_token"]}"
 """)
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -558,10 +558,10 @@ def test_config_validate_success(tmp_path, monkeypatch, live_config):
     config_file.parent.mkdir(parents=True)
     config_file.write_text(f"""
 [profiles.live]
-url = "{live_config['url']}"
-org = "{live_config['org']}"
-project = "{live_config['project']}"
-auth_token = "{live_config['auth_token']}"
+url = "{live_config["url"]}"
+org = "{live_config["org"]}"
+project = "{live_config["project"]}"
+auth_token = "{live_config["auth_token"]}"
 """)
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -599,10 +599,10 @@ def test_config_validate_org_not_found(tmp_path, monkeypatch, live_config):
     config_file.parent.mkdir(parents=True)
     config_file.write_text(f"""
 [profiles.bogus]
-url = "{live_config['url']}"
+url = "{live_config["url"]}"
 org = "definitely-not-a-real-org-xyz123"
 project = "test"
-auth_token = "{live_config['auth_token']}"
+auth_token = "{live_config["auth_token"]}"
 """)
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -834,10 +834,10 @@ def test_config_list_projects_json(tmp_path, monkeypatch, live_config):
     config_file.parent.mkdir(parents=True)
     config_file.write_text(f"""
 [profiles.live]
-url = "{live_config['url']}"
-org = "{live_config['org']}"
-project = "{live_config['project']}"
-auth_token = "{live_config['auth_token']}"
+url = "{live_config["url"]}"
+org = "{live_config["org"]}"
+project = "{live_config["project"]}"
+auth_token = "{live_config["auth_token"]}"
 """)
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -859,10 +859,10 @@ def test_config_validate_json(tmp_path, monkeypatch, live_config):
     config_file.parent.mkdir(parents=True)
     config_file.write_text(f"""
 [profiles.live]
-url = "{live_config['url']}"
-org = "{live_config['org']}"
-project = "{live_config['project']}"
-auth_token = "{live_config['auth_token']}"
+url = "{live_config["url"]}"
+org = "{live_config["org"]}"
+project = "{live_config["project"]}"
+auth_token = "{live_config["auth_token"]}"
 """)
 
     monkeypatch.setenv("HOME", str(tmp_path))

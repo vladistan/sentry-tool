@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass, field
 from typing import Annotated, Any
+from urllib.parse import quote_plus
 
 import structlog
 import typer
@@ -15,6 +16,8 @@ from sentry_tool.utils import api, get_config
 
 TRACE_ID_PATTERN = re.compile(r"^[0-9a-fA-F]{32}$")
 MAX_DESCRIPTION_LENGTH = 50
+PERIOD_PATTERN = re.compile(r"^\d+[mhdw]$")
+DURATION_PATTERN = re.compile(r"^(\d+(?:\.\d+)?)(ms|s)?$")
 
 
 @dataclass
@@ -27,33 +30,208 @@ class SpanNode:
     children: list["SpanNode"] = field(default_factory=list)
 
 
-def list_transactions(
+def _build_query(  # noqa: PLR0913
+    base_query: str,
+    transaction: str | None = None,
+    status: str | None = None,
+    duration_gt_ms: int | None = None,
+    user: str | None = None,
+    raw_query: str | None = None,
+) -> str:
+    parts = [base_query]
+    if transaction:
+        parts.append(f"transaction:{transaction}")
+    if status:
+        parts.append(f"transaction.status:{status}")
+    if duration_gt_ms is not None:
+        parts.append(f"transaction.duration:>{duration_gt_ms}")
+    if user:
+        parts.append(f"user.email:{user}")
+    if raw_query:
+        parts.append(raw_query)
+    return " ".join(parts)
+
+
+def _validate_period(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not PERIOD_PATTERN.match(value):
+        raise typer.BadParameter(
+            f"Invalid period '{value}'. Expected format: <number><unit> where unit is "
+            "m/h/d/w (e.g. 24h, 7d, 2w)."
+        )
+    return value
+
+
+def _parse_duration_gt(value: str | None) -> int | None:
+    if value is None:
+        return None
+    match = DURATION_PATTERN.match(value.strip())
+    if not match:
+        raise typer.BadParameter(
+            f"Invalid duration '{value}'. Expected format: <number>[ms|s] (e.g. 500ms, 2s, 1500)."
+        )
+    number = float(match.group(1))
+    unit = match.group(2) or "ms"
+    ms = number * 1000 if unit == "s" else number
+    return int(ms)
+
+
+def _format_stat(value: Any) -> str:
+    if value is None or value == "":
+        return ""
+    try:
+        return str(round(float(value)))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _render_stats_table(
+    events: list[dict[str, Any]],
+    format: OutputFormat,
+    footer: str,
+) -> None:
+    if format == OutputFormat.json:
+        render(events, format)
+        return
+
+    rows = [
+        {
+            "transaction": evt.get("transaction", ""),
+            "count": str(evt.get("count()", "")),
+            "avg": _format_stat(evt.get("avg(transaction.duration)")),
+            "min": _format_stat(evt.get("min(transaction.duration)")),
+            "max": _format_stat(evt.get("max(transaction.duration)")),
+            "p95": _format_stat(evt.get("p95(transaction.duration)")),
+        }
+        for evt in events
+    ]
+
+    columns = [
+        Column("Transaction", "transaction", max_width=50),
+        Column("Count", "count", justify="right"),
+        Column("Avg (ms)", "avg", justify="right"),
+        Column("Min (ms)", "min", justify="right"),
+        Column("Max (ms)", "max", justify="right"),
+        Column("P95 (ms)", "p95", justify="right"),
+    ]
+
+    render(rows, format, columns=columns, footer=footer)
+
+
+def list_transactions(  # noqa: PLR0913
     max_rows: Annotated[int, typer.Option("--max", "-n", help="Maximum transactions to show")] = 10,
     format: Annotated[
         OutputFormat,
         typer.Option("--format", "-f", help="Output format"),
     ] = OutputFormat.table,
+    query: Annotated[
+        str | None,
+        typer.Option("--query", "-q", help="Raw Sentry search syntax appended to base query"),
+    ] = None,
+    transaction: Annotated[
+        str | None,
+        typer.Option("--transaction", "-T", help="Filter by transaction name (supports globs)"),
+    ] = None,
+    status: Annotated[
+        str | None,
+        typer.Option("--status", help="Filter by transaction status (e.g. ok, internal_error)"),
+    ] = None,
+    period: Annotated[
+        str | None,
+        typer.Option("--period", help="Time window (e.g. 24h, 7d, 2w)"),
+    ] = None,
+    duration_gt: Annotated[
+        str | None,
+        typer.Option(
+            "--duration-gt",
+            help="Filter to transactions slower than this (e.g. 500ms, 2s, 1500)",
+        ),
+    ] = None,
+    user: Annotated[
+        str | None,
+        typer.Option("--user", help="Filter by user email"),
+    ] = None,
+    stats: Annotated[
+        bool,
+        typer.Option(
+            "--stats",
+            help="Aggregation mode: count/avg/min/max/p95 grouped by transaction name",
+        ),
+    ] = False,
 ) -> None:
-    """List recent transactions for the active project.
+    """List recent transactions, with optional filtering and aggregation.
 
     Examples:
         sentry-tool transactions
         sentry-tool transactions -n 5
         sentry-tool transactions --format json
+        sentry-tool transactions --transaction "/api/v1/*" --status ok
+        sentry-tool transactions --duration-gt 500ms --period 24h
+        sentry-tool transactions --query "user.id:123"
+        sentry-tool transactions --stats --period 7d
     """
     log = structlog.get_logger()
     config = get_config()
 
-    response = api(
+    validated_period = _validate_period(period)
+    duration_gt_ms = _parse_duration_gt(duration_gt)
+
+    base = f"event.type:transaction project:{config['project']}"
+    composed_query = _build_query(
+        base,
+        transaction=transaction,
+        status=status,
+        duration_gt_ms=duration_gt_ms,
+        user=user,
+        raw_query=query,
+    )
+    encoded_query = quote_plus(composed_query)
+
+    if stats:
+        url = (
+            f"/organizations/{config['org']}/events/"
+            f"?query={encoded_query}"
+            "&field=transaction"
+            "&field=count()"
+            "&field=avg(transaction.duration)"
+            "&field=max(transaction.duration)"
+            "&field=min(transaction.duration)"
+            "&field=p95(transaction.duration)"
+            "&sort=-count()"
+            "&dataset=transactions"
+        )
+        if validated_period:
+            url += f"&statsPeriod={validated_period}"
+
+        response = api(url, token=config["auth_token"], base_url=config["url"])
+        events = response.get("data", [])
+
+        if not events:
+            log.info("No transactions found", project=config["project"])
+            return
+
+        events = events[:max_rows]
+        period_label = validated_period or "default"
+        _render_stats_table(
+            events,
+            format,
+            footer=f"Showing {len(events)} endpoints (period: {period_label})",
+        )
+        return
+
+    url = (
         f"/organizations/{config['org']}/events/"
-        f"?query=event.type:transaction project:{config['project']}"
+        f"?query={encoded_query}"
         "&field=title&field=id&field=trace&field=transaction.duration"
         "&field=transaction.status&field=project&field=timestamp"
-        "&sort=-timestamp",
-        token=config["auth_token"],
-        base_url=config["url"],
+        "&sort=-timestamp"
+        "&dataset=transactions"
     )
+    if validated_period:
+        url += f"&statsPeriod={validated_period}"
 
+    response = api(url, token=config["auth_token"], base_url=config["url"])
     events = response.get("data", [])
 
     if not events:
@@ -115,7 +293,8 @@ def lookup_trace(
     response = api(
         f"/organizations/{config['org']}/events/?query=trace:{trace_id}"
         "&field=title&field=id&field=span_id&field=transaction.duration"
-        "&field=transaction.status&field=project&field=timestamp",
+        "&field=transaction.status&field=project&field=timestamp"
+        "&dataset=discover",
         token=config["auth_token"],
         base_url=config["url"],
     )
@@ -295,7 +474,8 @@ def show_transaction(
     config = get_config()
 
     event = api(
-        f"/organizations/{config['org']}/events/{config['project']}:{event_id}/",
+        f"/organizations/{config['org']}/events/{config['project']}:{event_id}/"
+        "?dataset=transactions",
         token=config["auth_token"],
         base_url=config["url"],
     )
@@ -396,7 +576,8 @@ def show_spans(
     config = get_config()
 
     event = api(
-        f"/organizations/{config['org']}/events/{config['project']}:{event_id}/",
+        f"/organizations/{config['org']}/events/{config['project']}:{event_id}/"
+        "?dataset=transactions",
         token=config["auth_token"],
         base_url=config["url"],
     )

@@ -63,7 +63,8 @@ def live_transaction(live_config):
         "?query=event.type:transaction"
         "&field=title&field=id&field=trace&field=transaction.duration"
         "&field=transaction.status&field=project&field=timestamp"
-        "&sort=-timestamp",
+        "&sort=-timestamp"
+        "&dataset=transactions",
         token=live_config["auth_token"],
         base_url=live_config["url"],
     )
@@ -126,7 +127,8 @@ def live_span_ops(live_config, live_transaction_id, live_transaction_project):
     """Discover span operation types from a real transaction."""
     event = api_call(
         f"/organizations/{live_config['org']}/events/"
-        f"{live_transaction_project}:{live_transaction_id}/",
+        f"{live_transaction_project}:{live_transaction_id}/"
+        "?dataset=transactions",
         token=live_config["auth_token"],
         base_url=live_config["url"],
     )
